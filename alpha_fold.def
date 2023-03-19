@@ -1,0 +1,125 @@
+Bootstrap: docker
+From: nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+
+
+# **Authors:** Adam Michaleas (Adam.Micheas@ll.mit.edu) and
+#              Darrell O. Ricke, Ph.D. (Darrell.Ricke@ll.mit.edu) 
+# 
+# **RAMS request ID 1022407**
+# 
+# **Overview:**
+# This is a Singularity container of DeepMind AlphaFold tool.
+# 
+# **Citation:** None
+# 
+# **Disclaimer:**
+# DISTRIBUTION STATEMENT A. Approved for public release. Distribution is unlimited.
+# 
+# This material is based upon work supported by the Department of the Air Force under 
+# Air Force Contract No. FA8702-15-D-0001. Any opinions, findings, conclusions or 
+# recommendations expressed in this material are those of the author(s) and do not 
+# necessarily reflect the views of the Department of the Air Force.
+# 
+# © 2023 Massachusetts Institute of Technology.
+# 
+# Subject to FAR52.227-11 Patent Rights - Ownership by the contractor (May 2014)
+# 
+# The software/firmware is provided to you on an As-Is basis
+# 
+# Delivered to the U.S. Government with Unlimited Rights, as defined in DFARS 
+# Part 252.227-7013 or 7014 (Feb 2014). Notwithstanding any copyright notice, 
+# U.S. Government rights in this work are defined by DFARS 252.227-7013 or 
+# DFARS 252.227-7014 as detailed above. Use of this work other than as specifically 
+# authorized by the U.S. Government may violate any copyrights that exist in this work.
+#
+# **License:** 
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
+
+%setup
+  mkdir -p ${SINGULARITY_ROOTFS}/S
+  mkdir -p ${SINGULARITY_ROOTFS}/S/alphafold
+
+%post
+  apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
+  build-essential \
+  bzip2 \
+  coreutils \
+  cmake \
+  cuda-tools-11-8 \
+  cuda-runtime-11-8 \
+  curl \
+  gcc \
+  git \
+  hmmer \
+  kalign \
+  libreadline6-dev \
+  libxml2 \
+  make \
+  tzdata \
+  wget \
+  unzip \
+  vim \
+  zip
+
+# Setup alphafold
+  cd /S
+  git clone https://github.com/deepmind/alphafold.git
+
+# Compile HHsuite from source.
+  mkdir hhsuite
+  cd hhsuite
+  wget https://github.com/soedinglab/hh-suite/releases/download/v3.3.0/hhsuite-3.3.0-SSE2-Linux.tar.gz
+  tar xvfz hhsuite-3.3.0-SSE2-Linux.tar.gz
+  export PATH="$(pwd)/bin:$(pwd)/scripts:$PATH"
+
+# Install Miniconda package manager.
+  cd /S/
+  wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /S/miniconda.sh
+  bash /S/miniconda.sh -b -p /S/miniconda/
+  export PATH="/S/miniconda/bin/:$PATH"
+
+# Install conda packages.
+  PATH="/usr/local/cuda-11.8/bin:$PATH"
+  conda install -qy conda==4.13.0 
+  conda install -y -c conda-forge openmm cudatoolkit pdbfixer pip python=3.9
+  conda clean --al --force-pkgs-dirs --yes
+
+  wget -q -P /S/alphafold/alphafold/common/ \
+  https://git.scicore.unibas.ch/schwede/openstructure/-/raw/7102c63615b64735c4941278d92b554ec94415f8/modules/mol/alg/src/stereo_chemical_props.txt
+  
+  # Install pip
+  # curl https://bootstrap.pypa.io/pip/3.6/get-pip.py -o get-pip.py
+  export SETUPTOOLS_USE_DISTUTILS=local
+  # python3 get-pip.py 
+  # python3 -m pip install --upgrade pip
+
+  pip3 install --upgrade pip  --no-cache-dir
+  pip3 install -r /S/alphafold/requirements.txt --no-cache-dir
+  pip3 install jax==0.3.17 jaxlib --upgrade  --no-cache-dir -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+
+  # chmod u+s /sbin/ldconfig.real
+
+%environment
+export PATH="/opt/conda/bin:/usr/local/cuda-11.8/bin:$PATH"
+
+%runscript
+cd /S/alphafold
+ldconfig
+exec python /S/alphafold/run_alphafold.py "$@"
+
+# %startscript
+cd /S/alphafold
+exec python /S/alphafold/run_alphafold.py "$@"
